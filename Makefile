@@ -4,4 +4,4 @@ restart:
 	sudo systemctl restart whatsapp-bot
 
 logs:
-	sudo journalctl -u whatsapp-bot -n 100 -f
+	tail -n 100 -f logs/webhook.log

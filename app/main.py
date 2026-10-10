@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import json
 import logging
+from pathlib import Path
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
@@ -9,8 +10,18 @@ from fastapi.responses import PlainTextResponse
 from .bot import handle_message
 from .config import settings
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-logger = logging.getLogger("whatsapp")
+# Dedicated logger: only webhook requests go through it, nothing else in the project
+logger = logging.getLogger("whatsapp.webhook")
+logger.setLevel(logging.INFO)
+logger.propagate = False
+LOG_FILE = Path(__file__).resolve().parent.parent / "logs" / "webhook.log"
+LOG_FILE.parent.mkdir(exist_ok=True)
+_handler = logging.FileHandler(LOG_FILE, encoding="utf-8")
+_handler.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+logger.addHandler(_handler)
+
+# Silence uvicorn's per-request access log
+logging.getLogger("uvicorn.access").disabled = True
 
 app = FastAPI(title="WhatsApp Bot")
 
@@ -20,28 +31,25 @@ async def health():
     return {"status": "ok"}
 
 
-@app.middleware("http")
-async def log_webhook_requests(request: Request, call_next):
-    """Log method, URL, headers and body of every request to /webhook."""
-    if request.url.path == "/webhook":
-        body = await request.body()  # cached, so the endpoint can still read it
-        logger.info(
-            "%s %s\nheaders=%s\nbody=%s",
-            request.method,
-            request.url,
-            json.dumps(dict(request.headers), indent=2),
-            body.decode(errors="replace"),
-        )
-    return await call_next(request)
+def _log_request(request: Request, body: bytes = b"") -> None:
+    logger.info(
+        "%s %s\nheaders=%s\nbody=%s",
+        request.method,
+        request.url,
+        json.dumps(dict(request.headers), indent=2),
+        body.decode(errors="replace"),
+    )
 
 
 @app.get("/webhook")
 async def verify(
+    request: Request,
     mode: str = Query("", alias="hub.mode"),
     token: str = Query("", alias="hub.verify_token"),
     challenge: str = Query("", alias="hub.challenge"),
 ):
     """Meta calls this once when you save the webhook URL."""
+    _log_request(request)
     if mode == "subscribe" and token == settings.verify_token:
         return PlainTextResponse(challenge)
     raise HTTPException(403)
@@ -57,6 +65,7 @@ def _valid_signature(body: bytes, header: str) -> bool:
 @app.post("/webhook")
 async def receive(request: Request, background: BackgroundTasks):
     body = await request.body()
+    _log_request(request, body)
     if not _valid_signature(body, request.headers.get("x-hub-signature-256", "")):
         raise HTTPException(401)
 
