@@ -6,9 +6,6 @@ from .whatsapp import send_text
 
 logger = logging.getLogger("whatsapp.webhook")
 
-# Testing only: reply just to these numbers (WhatsApp format: digits, no "+")
-ALLOWED_NUMBERS = {"201010079798"}
-
 # In-memory sessions (reset on restart): sender -> {"state", "cart", "mode", ...}
 SESSIONS: dict[str, dict] = {}
 
@@ -360,8 +357,6 @@ async def handle_message(message: dict) -> None:
     text = _input(message)
     logger.info("message from=%s type=%s text=%r", sender, message.get("type"), text)
 
-    if sender not in ALLOWED_NUMBERS:
-        return
     s = SESSIONS.setdefault(sender, {"state": "new"})
     if s["state"] == "new":  # first contact: show the menu whatever they wrote
         s["state"] = "main"
