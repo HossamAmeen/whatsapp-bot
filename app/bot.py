@@ -353,7 +353,7 @@ def _end(s: dict) -> str:
 
 
 async def handle_message(message: dict) -> None:
-    sender = message["from"]
+    sender = message.get("from") or message["from_user_id"]
     text = _input(message)
     logger.info("message from=%s type=%s text=%r", sender, message.get("type"), text)
 

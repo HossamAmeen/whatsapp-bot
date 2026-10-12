@@ -2,23 +2,13 @@ import hashlib
 import hmac
 import json
 import logging
-from pathlib import Path
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
 
 from .bot import handle_message
 from .config import settings
-
-# Dedicated logger: only webhook requests go through it, nothing else in the project
-logger = logging.getLogger("whatsapp.webhook")
-logger.setLevel(logging.INFO)
-logger.propagate = False
-LOG_FILE = Path(__file__).resolve().parent.parent / "logs" / "webhook.log"
-LOG_FILE.parent.mkdir(exist_ok=True)
-_handler = logging.FileHandler(LOG_FILE, encoding="utf-8")
-_handler.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
-logger.addHandler(_handler)
+from .weblog import log_entry
 
 # Silence uvicorn's per-request access log
 logging.getLogger("uvicorn.access").disabled = True
@@ -32,8 +22,8 @@ async def health():
 
 
 def _log_request(request: Request, body: bytes = b"") -> None:
-    logger.info(
-        "%s %s\nheaders=%s\nbody=%s",
+    log_entry(
+        "REQUEST %s %s\nheaders=%s\nbody=%s",
         request.method,
         request.url,
         json.dumps(dict(request.headers), indent=2),
